@@ -1,0 +1,86 @@
+Predictivie analysis of quality of fitness movements based on wearable equipmenent data
+======================================================================================
+
+## Data aquiring and cleaning
+  In this section training and testing datasets are load into R. In addition, due to issues of algorithms to work with NA values, the columns with NA in them are removed.
+``` {r warning=FALSE, message=FALSE, cache=TRUE}
+set.seed(355)
+library(caret); library(ggplot2); library(RANN); library(klaR); library(dplyr); library(randomForest)
+setwd("D:/Coursera/MLFirst")
+testing3<- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+training3<- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+training3<-training3[ , apply( training3, 2, function(x) !any(is.na(x)))]
+
+```
+  Afterwards, knn pre processing should be performed on the training data set to impute NA values if they exist. We named the training data as validation and devided the test data into a training and a test datasets.
+  
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+prePt<- preProcess(training3, method=c("knnImpute"))
+training1<- predict(prePt,training3)
+testing1<- predict(prePt,testing3)
+training1$classe <- factor(training1$classe)
+validation<- testing1[,-c(1:7)]
+training2<- training1[,-c(1:7)]
+INtraining<- createDataPartition(training2$classe, p=0.7, list=FALSE)
+training<- training2[INtraining,]
+testing<- training2[-INtraining,]
+```
+  To introuce cross validation into the solution we chose a 5 number K-fold strategy.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+train_control <- trainControl(method="cv", number=5)
+```
+  
+  The first model that we trained on our training dataset was a naive bayesian algorithm. However accuracy of this model is not desireable so we decided to add three models and use those sacked models to predict the outcome.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+fitnb<- train(classe~., data=training, trControl=train_control, method="nb", na.action=na.pass)
+fittednb<- predict(fitnb, testing)
+CMnb<- confusionMatrix(fittednb,testing$classe)
+```
+  The secong model that was trained on the training data was boosting algorithm.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+fitgbm<- train(classe~., data=training, trControl=train_control, method="gbm", na.action=na.pass, verbose=FALSE)
+fittedgbm<- predict(fitgbm, testing)
+CMgbm<- confusionMatrix(fittedgbm,testing$classe)
+```
+```{r}
+plot(fitgbm,plotType = "level")
+```
+
+  The third model that was trained on the training data was rand forest algorithm.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+fitrf<- train(classe~., data=training, trControl=train_control, method="rf", na.action=na.pass)
+fittedrf<- predict(fitrf, testing)
+CMrf<- confusionMatrix(fittedrf,testing$classe)
+```
+```{r}
+plot(fitrf)
+```
+
+  Finally, all these three models are stacked and another random forest algorithm was trained on the test data.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+prDF<-data.frame(fittednb,fittedrf, fittedgbm, classe=testing$classe)
+fitcombined<- train(classe~., data=prDF, trControl=train_control, method="rf", na.action=na.pass)
+fittedcombined<- predict(fitcombined, prDF)
+CMcombined<- confusionMatrix(fittedcombined,testing$classe)
+```
+  
+```{r}
+Combined.accuracy <- CMcombined$overall['Accuracy']
+rf.accuracy <- CMrf$overall['Accuracy']
+gbm.accuracy <- CMgbm$overall['Accuracy']
+nb.accuracy <- CMnb$overall['Accuracy']
+AccuracyDF<- data.frame(nb=nb.accuracy, gbm=gbm.accuracy,rf=rf.accuracy,combined=Combined.accuracy)
+AccuracyDF
+````  
+  Finallly all four models are used to predict the classe outcome based on the data in the validation data set. A comparison of all four models can be seen below.
+```{r  warning=FALSE, message=FALSE, cache=TRUE}
+fittedrfV<- predict(fitrf, validation)
+fittedgbmV<- predict(fitgbm, validation)
+fittednbV<- predict(fitnb, validation)
+prDFV<-data.frame(fittednb=fittednbV,fittedrf=fittedrfV,fittedgbm=fittedgbmV)
+fittedcombinedV<- predict(fitcombined, newdata=prDFV)
+ResultDF<- data.frame(nb=fittednbV, gbm=fittedgbmV,rf=fittedrfV,combined=fittedcombinedV)
+ResultDF
+```  
+
+
