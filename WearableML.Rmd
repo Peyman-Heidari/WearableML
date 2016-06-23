@@ -1,3 +1,6 @@
+---
+output: pdf_document
+---
 Predictivie analysis of quality of fitness movements based on wearable equipmenent data
 ======================================================================================
 
